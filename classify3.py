@@ -6,6 +6,7 @@ import numpy as np
 import tensorflow as tf
 import time
 import build_augmented_data
+import build_augmented_data2
 from PIL import Image, ImageOps
 from keras.models import Sequential
 from keras.layers.core import Flatten, Dense, Dropout
@@ -37,22 +38,12 @@ matplotlib.use('pdf')
 #_________________________________________________________________________________________________
 # Running this everytime will augment data and randomly shuffle it
 
-data_sets = build_augmented_data.load_training_and_test_data()
+#data_sets = build_augmented_data.load_training_and_test_data()
+#X_train, X_test, y_train, y_test = data_sets[0], data_sets[1], data_sets[2], data_sets[3]
+
+data_sets = build_augmented_data2.load_training_and_test_data()
 X_train, X_test, y_train, y_test = data_sets[0], data_sets[1], data_sets[2], data_sets[3]
-
-print("X_train shape: ", X_train.shape)
-print("X_test shape: ", X_test.shape)
-print("y_train shape: ", y_train.shape)
-print("y_test shape: ", y_test.shape)
-
-encoder = LabelEncoder()
-encoder.fit(y_train)
-encoded_Y = encoder.transform(y_train)
-# convert integers to dummy variables (i.e. one hot encoded)
-dummy_train_y = np_utils.to_categorical(encoded_Y)
-y_train = dummy_train_y
-
-
+og_split1,og_split2, og_split3, og_split4, og_split5 = data_sets[4], data_sets[5], data_sets[6], data_sets[7], data_sets[8]
 
 print("DATA CHECKPOINT")
 
@@ -98,18 +89,51 @@ def kaggle():
     return model
 
 
-def vgg16():
-    base_model=VGG16(input_shape = (128, 128,3), weights = 'imagenet', include_top=False) #imports the mobilenet model and discards the last 1000 neuron layer.
+def VGG_16(weights_path=None):
+    model = Sequential()
+    model.add(ZeroPadding2D((1, 1), input_shape=(160, 160, 3)))
+    model.add(Convolution2D(64, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(32, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
 
-    x=base_model.output
-    x=GlobalAveragePooling2D()(x)
-    x=Dense(1024,activation='relu')(x) #we add dense layers so that the model can learn more complex functions and classify for better results.
-    x=Dense(1024,activation='relu')(x) #dense layer 2
-    x=Dense(512,activation='relu')(x) #dense layer 3
-    preds=Dense(8,activation='softmax')(x) #final layer with softmax activation
-    model=Model(inputs=base_model.input,outputs=preds)
-    adam = Adam(lr=0.00001)
-    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(128, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(128, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(256, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(256, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(256, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(ZeroPadding2D((1, 1)))
+    model.add(Convolution2D(512, (3, 3), activation='relu'))
+    model.add(MaxPooling2D((2, 2), strides=(2, 2)))
+
+    model.add(Flatten())
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(4096, activation='relu'))
+    model.add(Dropout(0.5))
+    model.add(Dense(8, activation='softmax'))
+    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
     return model
 
 
@@ -145,23 +169,47 @@ def resnet():
     return model
 
 # model = VGG_16('vgg16_weights.h5')
-estimator = KerasClassifier(build_fn=vgg16, epochs=50, batch_size=8, verbose=1)
+
 #kfold = KFold(n_splits=5, shuffle=True, random_state=seed)
+
+
+
+#results = cross_val_score(estimator, X_train, , cv=kfold, fit_params={"callbacks": [earlystop]})
+#print("Baseline: %.2f%% (%.2f%%)" % (results.mean() * 100, results.std() * 100))
+
+#X_train, X_test, y_train, y_test = train_test_split(x, dummy_y, test_size=0.20)
+
+
+estimator = KerasClassifier(build_fn=resnet, epochs=50, batch_size=8, verbose=1)
 earlystop = EarlyStopping(monitor='loss', min_delta=0.0001, patience=5,verbose=1, mode='auto')
 estimator.fit(X_train, y_train, callbacks = [earlystop])
 
-y_pred = estimator.predict(X_test)
-y_pred = encoder.inverse_transform(y_pred)
+def work(X_train,X_test,y_train,y_test):
+
+    encoder = LabelEncoder()
+    encoder.fit(y_train)
+
+    y_pred = estimator.predict(X_test)
+    y_pred = encoder.inverse_transform(y_pred)
+
+    y_test_label = []
+    for i in range(len(y_test)):
+        ya = argmax(y_test[i])
+        y_test_label.append(ya)
+    y_test = encoder.inverse_transform(y_test_label)
+    matrix = confusion_matrix(y_test, y_pred)
+    print(matrix)
+    print("THE TEST ACCURACY: " + accuracy_score(y_test,y_pred))
+    return accuracy_score(y_test,y_pred)
+
+acc1 = work(X_train,X_test,y_train,y_test)
+
+# work with og_split 1-5 and perform same operations to generate each of their X_train,.....y_test
+# create acc2 - acc5 by passing it into work
+# average the acc's and display final validation accuracy
 
 
-print("y_test shape: ", y_test.shape)
-print("y_test FIRST 5 LABELS: ", y_test[:5])
-print("y_pred shape: ", y_pred.shape)
-print("y_pred FIRST 5 LABELS: ", y_pred[:5])
 
-print("THE TEST ACCURACY: ", accuracy_score(y_test,y_pred))
-matrix = confusion_matrix(y_test, y_pred)
-print(matrix)
 
 classes = ['01_TUMOR', '02_STROMA', '03_COMPLEX', '04_LYMPHO', '05_DEBRIS', '06_MUCOSA', '07_ADIPOSE', '08_EMPTY']
 
