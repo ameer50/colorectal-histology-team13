@@ -2,10 +2,8 @@
 # -*- coding: utf-8 -*-
 """
 Created on March 1 2019
-
 @author: ameer syedibrahim
 """
-
 import imageio
 import matplotlib.pyplot as plt
 import os
@@ -23,31 +21,10 @@ import cv2
 import imgaug
 from imgaug import augmenters
 
-
-def load_batch(foldername):
-    '''load data from single folder'''
-    images = []
-    labels = []
-    for category in os.listdir(foldername):
-        if os.path.isdir(os.path.join(foldername, category)):
-            for img in os.listdir(os.path.join(foldername, category)):
-                if img.lower().endswith(('.png', '.jpg', '.jpeg', '.tif')):
-                    image = Image.open(os.path.join(foldername, category) + "/" + img)
-                    sess = tf.Session()
-                    image = image.resize((150, 150))
-                    with sess.as_default():
-                        images.append(np.asarray(image))
-                    labels.append(str(category))
-    print(np.asarray(images))
-    return np.asarray(images), np.asarray(labels)
-
-
 def load_training_and_test_data():
     '''load all folder data and merge training batches'''
 
     new_dirr = "colorectal-histology-mnist/Kather_texture_2016_image_tiles_5000/Kather_texture_2016_image_tiles_5000/"
-    dict1 = {}
-    dict2 = {}
 
     def gen_labels(label, a_list):
 
@@ -71,56 +48,11 @@ def load_training_and_test_data():
 
     # ______________________________________________________________________________________
 
-    # in a folder 'foldername', each file is renamed to a name that starts with 'tumor_type' followed by a number
-
-    def rename_for_folder(foldername, tumor_type):
-        i = 0
-        for filename in os.listdir(foldername):
-            dst = tumor_type + str(i) + ".jpg"
-            src = foldername + '/' + filename
-            dst = foldername + '/' + dst
-            i += 1
-            # rename() function will
-            # rename all the files
-            os.rename(src, dst)
-
-        # ______________________________________________________________________________________
-
     # normalize each image
     def norm_image(image):
         return (image - np.mean(image)) / np.std(image)
 
-    # for every image x, augmentations are performed on it and the resulting images are stored in the savedir
-    # OLD AUGMENTATION METHODS
-    '''def augment7(the_dir, savedir):
-        datagen3 = ImageDataGenerator( horizontal_flip=True, vertical_flip=True)
-        img = image.load_img(the_dir).resize((150, 150))  # this is a PIL image
-        x = image.img_to_array(img)  # this is a Numpy array with shape (150, 150, 3)
-        x = norm_image(x);
-        x = x.reshape((1,) + x.shape)  # this is a Numpy array with shape (1, 3, 150, 150)
-        i = 0
-        for batch in datagen3.flow(x, batch_size=1, save_to_dir=savedir, save_prefix='new', save_format='jpg'):
-            i += 1
-            if i > 6:
-                break
-
-    def augment5(the_dir, savedir):
-        datagen3 = ImageDataGenerator()
-        unique = the_dir.split("/")[4]
-        img = image.load_img(the_dir).resize((150, 150))  # this is a PIL image
-        x = image.img_to_array(img)  # this is a Numpy array with shape (150, 150, 3)
-        # x = x.reshape((1,) + x.shape)  # this is a Numpy array with shape (1, 3, 150, 150)
-        x90 = datagen3.apply_transform(x, {'theta': 90})
-        x180 = datagen3.apply_transform(x, {'theta': 180})
-        x270 = datagen3.apply_transform(x, {'theta': 270})
-        xhflip = datagen3.apply_transform(x, {'flip_horizontal': True})
-        xvflip = datagen3.apply_transform(x, {'flip_vertical': True})
-        cv2.imwrite(os.path.join(savedir, unique + '90.jpg'), x90)
-        cv2.imwrite(os.path.join(savedir, unique + '180.jpg'), x180)
-        cv2.imwrite(os.path.join(savedir, unique + '270.jpg'), x270)
-        cv2.imwrite(os.path.join(savedir, unique + 'h.jpg'), xhflip)
-        cv2.imwrite(os.path.join(savedir, unique + 'v.jpg'), xvflip) '''
-
+    # randomly augment an image into 3 new images
     def augment(X):
         seq = augmenters.Sequential(
             [
@@ -132,35 +64,36 @@ def load_training_and_test_data():
                 augmenters.Affine(scale=(0.9, 1.1)),  # scale images from 90% to 110% scale
             ]
         )
-        return seq.augment_images(X*5)
+        return seq.augment_images([X, X, X, X, X])
 
-        # ______________________________________________________________________________________
-
-        # ______________________________________________________________________________________
-        # make all this garbo cleeeean
-    grand_test_final = []
-    grand_test_labels = []
-    
-    for the_fi in os.listdir(new_dirr):  # iterate over each label 01_TUMOR .... 08_EMPTY
+    print("CHECKPOINT1: Iterating over every label...")
+    the_images = []
+    the_labels = []
+    vval = os.listdir(new_dirr)
+    for the_fi in vval:  # iterate over each label 01_TUMOR .... 08_EMPTY
         star_dir = new_dirr + the_fi  # make note of the directory that now includes this folder
         the_list = []
-        the_images = []
-        the_labels = []
         for filename in os.listdir(star_dir):
             the_list.append(filename)  # make the_list contain string names of all the images in the label folder
-            
-        the_images.append(str_to_img(star_dir, the_list))
-        the_labels.append(gen_labels(the_fi, the_list))
+
+        the_images = the_images  + str_to_img(star_dir, the_list)
+        the_labels = the_labels + gen_labels(the_fi, the_list)
         
-    temp = list(zip(the_images,the_labels))
-    random.shuffle(temp)
+    temp_list = list(zip(the_images,the_labels))
+    random.shuffle(temp_list)
     r_list = list(zip(*temp_list))
     the_images = list(r_list[0])
     the_labels = list(r_list[1])
 
     for i in range(len(the_images)):
         the_images[i] = norm_image(the_images[i])
-    
+
+    print("CHECKPOINT2: Creating batches for 5-fold validation...")
+
+    print(len(the_images))
+    print(the_images[0])
+    print(len(the_labels))
+    print(the_labels[0])
     batch1i = the_images[:1000]  # split into 5 categories
     batch2i = the_images[1000:2000]  # split into 5 categories
     batch3i = the_images[2000:3000]  # split into 5 categories
@@ -173,6 +106,8 @@ def load_training_and_test_data():
     batch4l = the_labels[3000:4000]  # split into 5 categories
     batch5l = the_labels[4000:]  # split into 5 categories
 
+
+    print("CHECKPOINT3: Performing augmentation on Batches 1-5...")
 
     the_test_images1 = batch1i
     the_test_labels1 = batch1l
@@ -189,11 +124,12 @@ def load_training_and_test_data():
 
 
     # (VERIFY SHAPE)
-    # the_augmented_train1 contains (4000*5 ?) images that are now augmented
-    ## the_augmented_labels1 contains (4000*5) labels for the above images
+    # the_augmented_train1 contains (4000*3 ?) images that are now augmented
+    ## the_augmented_labels1 contains (4000*3) labels for the above images
     # the_test_images1 contains (1000) images
     # the_test_labels1 contains (1000) labels
 
+    '''
     the_test_images2 = batch2i
     the_test_labels2 = batch2l
     the_train2 = batch1i + batch3i + batch4i + batch5i
@@ -206,13 +142,6 @@ def load_training_and_test_data():
 
     for cz in the_labels2:
         the_augmented_labels2 = the_augmented_labels2 + [cz]*5
-
-
-    # (VERIFY SHAPE)
-    # the_augmented_train1 contains (4000*5 ?) images that are now augmented
-    ## the_augmented_labels1 contains (4000*5) labels for the above images
-    # the_test_images1 contains (1000) images
-    # the_test_labels1 contains (1000) labels
 
     the_test_images3 = batch3i
     the_test_labels3 = batch3l
@@ -228,12 +157,6 @@ def load_training_and_test_data():
         the_augmented_labels3 = the_augmented_labels3 + [cz]*5
 
 
-    # (VERIFY SHAPE)
-    # the_augmented_train1 contains (4000*5 ?) images that are now augmented
-    ## the_augmented_labels1 contains (4000*5) labels for the above images
-    # the_test_images1 contains (1000) images
-    # the_test_labels1 contains (1000) labels
-
     the_test_images4 = batch4i
     the_test_labels4 = batch4l
     the_train4 = batch1i + batch2i + batch3i + batch5i
@@ -248,11 +171,6 @@ def load_training_and_test_data():
         the_augmented_labels4 = the_augmented_labels4 + [cz]*5
 
 
-    # (VERIFY SHAPE)
-    # the_augmented_train1 contains (4000*5 ?) images that are now augmented
-    ## the_augmented_labels1 contains (4000*5) labels for the above images
-    # the_test_images1 contains (1000) images
-    # the_test_labels1 contains (1000) labels
 
     the_test_images5 = batch5i
     the_test_labels5 = batch5l
@@ -268,78 +186,88 @@ def load_training_and_test_data():
         the_augmented_labels5 = the_augmented_labels5 + [cz]*5
 
 
-    # (VERIFY SHAPE)
-    # the_augmented_train1 contains (4000*5 ?) images that are now augmented
-    ## the_augmented_labels1 contains (4000*5) labels for the above images
-    # the_test_images1 contains (1000) images
-    # the_test_labels1 contains (1000) labels
+   #__________________________________________________________________
+    '''
+    print("CHECKPOINT4: Shuffle 5 Batches of Training Data...")
+    # SHUFFLE TRAINING DATA
+    temp1 = list(zip(the_augmented_train1, the_augmented_labels1))
+    random.shuffle(temp1)
+    f_list1 = list(zip(*temp1))
+    the_augmented_train1 = np.asarray(list(f_list1[0]))
+    the_augmented_labels1 = np.asarray(list(f_list1[1]))
+
+    '''
+    temp2 = list(zip(the_augmented_train2, the_augmented_labels2))
+    random.shuffle(temp2)
+    f_list2 = list(zip(*temp2))
+    the_augmented_train2 = np.asarray(list(f_list2[0]))
+    the_augmented_labels2 = np.asarray(list(f_list2[1]))
+
+    temp3 = list(zip(the_augmented_train3, the_augmented_labels3))
+    random.shuffle(temp3)
+    f_list3 = list(zip(*temp3))
+    the_augmented_train3 = np.asarray(list(f_list3[0]))
+    the_augmented_labels3 = np.asarray(list(f_list3[1]))
+
+    temp4 = list(zip(the_augmented_train4, the_augmented_labels4))
+    random.shuffle(temp4)
+    f_list4 = list(zip(*temp4))
+    the_augmented_train4 = np.asarray(list(f_list4[0]))
+    the_augmented_labels4 = np.asarray(list(f_list4[1]))
+
+    temp5 = list(zip(the_augmented_train5, the_augmented_labels5))
+    random.shuffle(temp5)
+    f_list5 = list(zip(*temp5))
+    the_augmented_train5 = np.asarray(list(f_list5[0]))
+    the_augmented_labels5 = np.asarray(list(f_list5[1]))
+    '''
+   #__________________________________________________________________
+    # SHUFFLE TEST DATA
+    print("CHECKPOINT5: Shuffle 5 Batches of Test Data...")
+
+    temp11 = list(zip(the_test_images1, the_test_labels1))
+    random.shuffle(temp11)
+    f_list11 = list(zip(*temp11))
+    the_test_images1 = np.asarray(list(f_list11[0]))
+    the_test_labels1 = np.asarray(list(f_list11[1]))
+    '''
+    temp22 = list(zip(the_test_images2, the_test_labels2))
+    random.shuffle(temp22)
+    f_list22 = list(zip(*temp22))
+    the_test_images2 = np.asarray(list(f_list22[0]))
+    the_test_labels2 = np.asarray(list(f_list22[1]))
+
+    temp33 = list(zip(the_test_images3, the_test_labels3))
+    random.shuffle(temp33)
+    f_list33 = list(zip(*temp33))
+    the_test_images3 = np.asarray(list(f_list33[0]))
+    the_test_labels3 = np.asarray(list(f_list33[1]))
+
+    temp44 = list(zip(the_test_images4, the_test_labels4))
+    random.shuffle(temp44)
+    f_list44 = list(zip(*temp44))
+    the_test_images4 = np.asarray(list(f_list44[0]))
+    the_test_labels4 = np.asarray(list(f_list44[1]))
+
+    temp55 = list(zip(the_test_images5, the_test_labels5))
+    random.shuffle(temp55)
+    f_list55 = list(zip(*temp55))
+    the_test_images5 = np.asarray(list(f_list55[0]))
+    the_test_labels5 = np.asarray(list(f_list55[1]))
+    '''
+
+    # __________________________________________________________________
+
+    #X_trains = [the_augmented_train1, the_augmented_train2, the_augmented_train3, the_augmented_train4, the_augmented_train5]
+    #X_tests = [the_test_images1, the_test_images2, the_test_images3, the_test_images4, the_test_images5]
+    #y_trains = [the_augmented_labels1, the_augmented_labels2, the_augmented_labels3, the_augmented_labels4, the_augmented_labels5 ]
+    #y_tests = [the_test_labels1, the_test_labels2, the_test_labels3, the_test_labels4, the_test_labels5 ]
 
 
-    X_train = [the_augmented_train1, the_augmented_train2, the_augmented_train3, the_augmented_train4, the_augmented_train5]
-    X_test = [the_test_images1, the_test_images2, the_test_images3, the_test_images4, the_test_images5]
-    y_train = [the_augmented_labels1, the_augmented_labels2, the_augmented_labels3, the_augmented_labels4, the_augmented_labels5 ]
-    y_test = [the_test_labels1, the_test_labels2, the_test_labels3, the_test_labels4, the_test_labels5 ]
 
-
-    
-    
-
-
-    # ____________________________________________________________________________________________________________________
-
-
-    temp_list = list(zip(unity_test_images, unity_test_labels))
-    random.shuffle(temp_list)
-    f_list = list(zip(*temp_list))
-    unity_test_images = np.asarray(list(f_list[0]))
-    unity_test_labels = np.asarray(list(f_list[1]))
-
-    # ____________________________________________________________________________________________________________________
-
-    test_data_dict = {
-        'images': unity_test_images,
-        'labels': unity_test_labels
-    }
-
-
-
-    # ____________________________________________________________________________________________________________________
-    # shuffle the contents of xs and ys while preseving the pairing
-
-    temp_list2 = list(zip(xs, ys))
-    random.shuffle(temp_list2)
-    f_list2 = list(zip(*temp_list2))
-    xs = np.asarray(list(f_list2[0]))
-    ys = np.asarray(list(f_list2[1]))
-
-    # ____________________________________________________________________________________________________________________
-
-    training_data_dict = {
-        'images': xs,
-        'labels': ys
-    }
-
-    X_train = training_data_dict["images"]
-    X_test = test_data_dict["images"]
-    y_train = training_data_dict["labels"]
-    y_test = test_data_dict["labels"]
-
-    encoder = LabelEncoder()
-    encoder.fit(y_train)
-    encoded_Y = encoder.transform(y_train)
-    # convert integers to dummy variables (i.e. one hot encoded)
-    dummy_train_y = np_utils.to_categorical(encoded_Y)
-    y_train = dummy_train_y
-
-    encoder2 = LabelEncoder()
-    encoder2.fit(y_test)
-    encoded_Y2 = encoder2.transform(y_test)
-    # convert integers to dummy variables (i.e. one hot encoded)
-    dummy_test_y = np_utils.to_categorical(encoded_Y2)
-    y_test = dummy_test_y
-
-    final_list = [X_train, X_test, y_train, y_test, og_split1, og_split2, og_split3, og_split4, og_split5]
-    return final_list
+    #final_list = [X_trains, X_tests, y_trains, y_tests]
+    print("CHECKPOINT6: Data Preparation Complete!")
+    return [the_augmented_train1, the_augmented_labels1,the_test_images1,the_test_labels1]
 
 
 def main():
